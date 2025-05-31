@@ -17,6 +17,9 @@ class BrowserlessClient(
     private val webClient: WebClient = WebClient.builder()
         .baseUrl("https://chrome.browserless.io")
         .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+        .codecs { configurer ->
+            configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024) // 10MB limit
+        }
         .build()
 
     private val logger = LoggerFactory.getLogger(BrowserlessClient::class.java)
@@ -25,15 +28,27 @@ class BrowserlessClient(
         url: String,
         fullPage: Boolean = true,
         width: Int? = null,
-        height: Int? = null
+        height: Int? = null,
+        waitForTimeout: Int = 3000,
+        waitUntil: String = "networkidle2"
     ): Mono<ByteArray> {
-        val options = mutableMapOf<String, Any>("fullPage" to fullPage)
+        val gotoOptions = mutableMapOf<String, Any>(
+            "waitUntil" to waitUntil,
+            "timeout" to waitForTimeout  // Move waitForTimeout inside gotoOptions as "timeout"
+        )
+
+        val options = mutableMapOf<String, Any>(
+            "fullPage" to fullPage
+        )
+
         width?.let { options["width"] = it }
         height?.let { options["height"] = it }
 
         val body = mapOf(
             "url" to url,
-            "options" to options
+            "options" to options,
+            "gotoOptions" to gotoOptions
+            // Remove waitForTimeout from top level
         )
 
         return webClient.post()
@@ -55,16 +70,55 @@ class BrowserlessClient(
         landscape: Boolean = false,
         displayHeaderFooter: Boolean = false,
         printBackground: Boolean = true,
-        scale: Double = 1.0
+        scale: Double = 1.0,
+        waitForTimeout: Int = 3000,
+        waitUntil: String = "networkidle2",
+        singlePage: Boolean = true
     ): Mono<ByteArray> {
-        val body = mapOf(
-            "url" to url,
-            "options" to mapOf(
+        val gotoOptions = mutableMapOf<String, Any>(
+            "waitUntil" to waitUntil,
+            "timeout" to waitForTimeout  // Move waitForTimeout inside gotoOptions as "timeout"
+        )
+
+        val options = if (singlePage) {
+            mapOf(
                 "landscape" to landscape,
                 "displayHeaderFooter" to displayHeaderFooter,
                 "printBackground" to printBackground,
-                "scale" to scale
+                "scale" to scale,
+                "format" to "A4",
+                "margin" to mapOf(
+                    "top" to "0.1in",
+                    "bottom" to "0.1in",
+                    "left" to "0.1in",
+                    "right" to "0.1in"
+                ),
+                "preferCSSPageSize" to false,
+                "width" to "8.27in",
+                "height" to "50in"
             )
+        } else {
+            mapOf(
+                "landscape" to landscape,
+                "displayHeaderFooter" to displayHeaderFooter,
+                "printBackground" to printBackground,
+                "scale" to scale,
+                "format" to "A4",
+                "margin" to mapOf(
+                    "top" to "0.4in",
+                    "bottom" to "0.4in",
+                    "left" to "0.4in",
+                    "right" to "0.4in"
+                ),
+                "preferCSSPageSize" to true
+            )
+        }
+
+        val body = mapOf(
+            "url" to url,
+            "options" to options,
+            "gotoOptions" to gotoOptions
+            // Remove waitForTimeout from top level
         )
 
         return webClient.post()
